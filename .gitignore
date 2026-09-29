@@ -1,0 +1,9 @@
+# Next.js build outputs
+.next/
+.netlify/
+out/
+build/
+node_modules/
+
+# Environment variables (except env defaults)
+.env*.local
