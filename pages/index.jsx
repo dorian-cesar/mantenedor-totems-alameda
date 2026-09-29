@@ -236,6 +236,70 @@ export default function Home() {
     setShowAddModal(false);
   };
 
+  const handleToggleTotemStatus = async (totem, e) => {
+    if (e) e.stopPropagation();
+    const newStatus = totem.status === 'online' ? 'offline' : 'online';
+    const updatedTotem = { ...totem, status: newStatus };
+
+    // Actualización optimista inmediata en UI
+    setTotems((prev) => prev.map((t) => (t.identificador === totem.identificador ? updatedTotem : t)));
+    if (selectedTotem && selectedTotem.identificador === totem.identificador) {
+      setSelectedTotem(updatedTotem);
+    }
+    setDispositivos((prev) => prev.map((d) => (d.identificador === totem.identificador ? { ...d, status: newStatus } : d)));
+
+    try {
+      const res = await fetch('/api/totems', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: totem.id,
+          identificador: totem.identificador,
+          status: newStatus
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Error al actualizar estado');
+      }
+    } catch (err) {
+      console.error('Error cambiando estado del tótem:', err);
+      alert(`Error al actualizar estado del tótem '${totem.identificador}': ` + err.message);
+      fetchTotemsFromDB();
+    }
+  };
+
+  const handleToggleDeviceStatus = async (device, e) => {
+    if (e) e.stopPropagation();
+    const newStatus = device.status === 'offline' ? 'online' : 'offline';
+
+    // Actualización optimista inmediata
+    setDispositivos((prev) => prev.map((d) => (d.identificador === device.identificador ? { ...d, status: newStatus } : d)));
+    setTotems((prev) => prev.map((t) => (t.identificador === device.identificador ? { ...t, status: newStatus } : t)));
+    if (selectedTotem && selectedTotem.identificador === device.identificador) {
+      setSelectedTotem((prev) => (prev ? { ...prev, status: newStatus } : null));
+    }
+
+    try {
+      const res = await fetch('/api/totems', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identificador: device.identificador,
+          status: newStatus
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Error en servidor');
+      }
+    } catch (err) {
+      console.error('Error cambiando estado del dispositivo:', err);
+      alert(`Error al actualizar estado del dispositivo '${device.identificador}': ` + err.message);
+      fetchTotemsFromDB();
+    }
+  };
+
   const openEditModal = (totem, e) => {
     if (e) e.stopPropagation();
     setTotemEditForm({
@@ -416,9 +480,6 @@ export default function Home() {
                 <h3 style={{ margin: 0, color: '#f1f5f9', fontSize: '1.15rem' }}>{totem.identificador}</h3>
               </div>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <span style={{ background: totem.status === 'online' ? '#166534' : '#854d0e', color: totem.status === 'online' ? '#86efac' : '#fef08a', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                  🟢 {totem.status}
-                </span>
                 <button
                   onClick={(e) => openEditModal(totem, e)}
                   title="Editar Datos del Tótem"
@@ -435,6 +496,67 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            {/* Switch interactivo: Habilitar/Deshabilitar Botón de Inicio del Tótem */}
+            <div
+              onClick={(e) => handleToggleTotemStatus(totem, e)}
+              title={totem.status === 'online' ? 'Clic para Deshabilitar Botón de Inicio / Poner Offline' : 'Clic para Habilitar Botón de Inicio / Poner Online'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: totem.status === 'online' ? '#14532d35' : '#7f1d1d35',
+                border: totem.status === 'online' ? '1px solid #16a34a' : '1px solid #dc2626',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                marginBottom: '12px',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.1rem' }}>
+                  {totem.status === 'online' ? '🟢' : '🔴'}
+                </span>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: totem.status === 'online' ? '#86efac' : '#fca5a5' }}>
+                    Botón de Inicio: {totem.status === 'online' ? 'HABILITADO' : 'DESHABILITADO'}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                    {totem.status === 'online' ? 'Tótem operativo para público' : 'Tótem bloqueado / fuera de servicio'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Botón Switch Toggle */}
+              <div
+                style={{
+                  width: '46px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  background: totem.status === 'online' ? '#22c55e' : '#64748b',
+                  position: 'relative',
+                  padding: '2px',
+                  boxSizing: 'border-box',
+                  transition: 'background 0.2s',
+                  flexShrink: 0
+                }}
+              >
+                <div
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                    transform: totem.status === 'online' ? 'translateX(22px)' : 'translateX(0px)',
+                    transition: 'transform 0.2s'
+                  }}
+                />
+              </div>
+            </div>
+
             <p style={{ margin: '0 0 5px', color: '#cbd5e1', fontSize: '0.9rem' }}>📍 Ubicación: <strong>{totem.ubicacion}</strong></p>
             <p style={{ margin: '0 0 15px', color: '#94a3b8', fontSize: '0.85rem' }}>
               🌐 IP Autodetectada (BBDD): <code>{totem.ip}</code>
@@ -463,25 +585,47 @@ export default function Home() {
       {/* Editor de Vídeos para Tótem Seleccionado */}
       {selectedTotem && (
         <div style={{ background: '#1e293b', border: '1px solid #38bdf8', borderRadius: '12px', padding: '25px', marginBottom: '30px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
             <div>
-              <h2 style={{ margin: 0, color: '#38bdf8' }}>⚙️ Administrar Vídeos para: {selectedTotem.identificador}</h2>
+              <h2 style={{ margin: 0, color: '#38bdf8' }}>⚙️ Administrar Tótem: {selectedTotem.identificador}</h2>
               <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>
                 ID Fijo Permanente: <code>{selectedTotem.identificador}</code> | IP Autodetectada: <code>{selectedTotem.ip}</code> | Ubicación: {selectedTotem.ubicacion}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {/* Switch en Header del Tótem Seleccionado */}
+              <button
+                type="button"
+                onClick={(e) => handleToggleTotemStatus(selectedTotem, e)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: selectedTotem.status === 'online' ? '#166534' : '#7f1d1d',
+                  color: selectedTotem.status === 'online' ? '#86efac' : '#fca5a5',
+                  border: selectedTotem.status === 'online' ? '1px solid #22c55e' : '1px solid #ef4444',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <span>{selectedTotem.status === 'online' ? '🟢 Botón Inicio Habilitado' : '🔴 Botón Inicio Deshabilitado'}</span>
+                <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px' }}>Cambiar</span>
+              </button>
+
               <button
                 onClick={(e) => openEditModal(selectedTotem, e)}
                 style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
               >
-                ✏️ Editar Campos del Tótem
+                ✏️ Editar Campos
               </button>
               <button
                 onClick={(e) => handleDeleteTotem(selectedTotem.id, selectedTotem.identificador, e)}
                 style={{ background: '#991b1b', color: '#fca5a5', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
               >
-                🗑️ Eliminar Tótem
+                🗑️ Eliminar
               </button>
             </div>
           </div>
@@ -638,6 +782,7 @@ export default function Home() {
                   {dispositivos.map((d) => {
                     const isSelected = newTotem.identificador === d.identificador;
                     const isAlreadyRegistered = totems.some((t) => t.identificador?.toLowerCase() === d.identificador?.toLowerCase());
+                    const isOnline = d.status === 'online';
                     return (
                       <button
                         key={d.id}
@@ -651,9 +796,13 @@ export default function Home() {
                           padding: '4px 8px',
                           fontSize: '0.75rem',
                           cursor: 'pointer',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
                         }}
                       >
+                        <span>{isOnline ? '🟢' : '🔴'}</span>
                         <strong>ID: {d.identificador}</strong> ({d.ip})
                       </button>
                     );
@@ -697,6 +846,7 @@ export default function Home() {
                   <div><strong>🟢 Dispositivo Detectado:</strong> <code>{newTotem.selectedDevice.identificador}</code></div>
                   <div><strong>🌐 Dirección IP:</strong> <code>{newTotem.selectedDevice.ip}</code></div>
                   <div><strong>📍 Ubicación en BBDD:</strong> {newTotem.selectedDevice.ubicacion || 'Sin ubicación'}</div>
+                  <div><strong>⚡ Estado actual:</strong> {newTotem.selectedDevice.status || 'online'}</div>
                 </div>
               )}
 
@@ -716,10 +866,10 @@ export default function Home() {
       {/* Modal para Editar Tótem Existent */}
       {showEditModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-          <div style={{ background: '#1e293b', border: '1px solid #38bdf8', borderRadius: '12px', padding: '30px', width: '420px' }}>
+          <div style={{ background: '#1e293b', border: '1px solid #38bdf8', borderRadius: '12px', padding: '30px', width: '440px' }}>
             <h3 style={{ margin: '0 0 10px', color: '#38bdf8' }}>✏️ Editar Campos del Tótem</h3>
             <p style={{ margin: '0 0 20px', color: '#94a3b8', fontSize: '0.85rem' }}>
-              Modifica los campos del tótem en la BBDD PostgreSQL (RDS).
+              Modifica los datos y el estado de operación del tótem.
             </p>
             <form onSubmit={handleSaveTotemEdit} style={{ display: 'grid', gap: '15px' }}>
               <div>
@@ -761,19 +911,47 @@ export default function Home() {
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  Estado de Operación:
+              {/* Control de Botón de Inicio / Estado */}
+              <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                  ⚡ Botón de Inicio / Estado Operativo:
                 </label>
-                <select
-                  value={totemEditForm.status}
-                  onChange={(e) => setTotemEditForm({ ...totemEditForm, status: e.target.value })}
-                  style={{ width: '100%', padding: '10px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}
-                >
-                  <option value="online">🟢 Online (Activo)</option>
-                  <option value="offline">🔴 Offline (Inactivo)</option>
-                  <option value="maintenance">🟡 Mantenimiento</option>
-                </select>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTotemEditForm({ ...totemEditForm, status: 'online' })}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: totemEditForm.status === 'online' ? '#166534' : '#1e293b',
+                      color: totemEditForm.status === 'online' ? '#86efac' : '#94a3b8',
+                      border: totemEditForm.status === 'online' ? '1px solid #22c55e' : '1px solid #334155',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    🟢 Habilitado (Online)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTotemEditForm({ ...totemEditForm, status: 'offline' })}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: totemEditForm.status === 'offline' ? '#7f1d1d' : '#1e293b',
+                      color: totemEditForm.status === 'offline' ? '#fca5a5' : '#94a3b8',
+                      border: totemEditForm.status === 'offline' ? '1px solid #ef4444' : '1px solid #334155',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    🔴 Deshabilitado (Offline)
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
