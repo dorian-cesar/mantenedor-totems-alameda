@@ -96,7 +96,7 @@ export default function Home() {
   const [newTotem, setNewTotem] = useState({ identificador: '', ubicacion: '', selectedDevice: null });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [totemEditForm, setTotemEditForm] = useState({ id: null, identificador: '', ip: '', ubicacion: '', status: 'online' });
+  const [totemEditForm, setTotemEditForm] = useState({ id: null, identificador: '', ip: '', ubicacion: '', status: 'online', convenios: false });
 
   const [videoSlotEdit, setVideoSlotEdit] = useState({ slot: 1, name: '', url: '' });
   const [loading, setLoading] = useState(false);
@@ -269,6 +269,39 @@ export default function Home() {
     }
   };
 
+  const handleToggleTotemConvenios = async (totem, e) => {
+    if (e) e.stopPropagation();
+    const newConvenios = !totem.convenios;
+    const updatedTotem = { ...totem, convenios: newConvenios };
+
+    // Actualización optimista inmediata en UI
+    setTotems((prev) => prev.map((t) => (t.identificador === totem.identificador ? updatedTotem : t)));
+    if (selectedTotem && selectedTotem.identificador === totem.identificador) {
+      setSelectedTotem(updatedTotem);
+    }
+    setDispositivos((prev) => prev.map((d) => (d.identificador === totem.identificador ? { ...d, convenios: newConvenios } : d)));
+
+    try {
+      const res = await fetch('/api/totems', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: totem.id,
+          identificador: totem.identificador,
+          convenios: newConvenios
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Error al actualizar convenios');
+      }
+    } catch (err) {
+      console.error('Error cambiando convenios del tótem:', err);
+      alert(`Error al actualizar convenios del tótem '${totem.identificador}': ` + err.message);
+      fetchTotemsFromDB();
+    }
+  };
+
   const handleToggleDeviceStatus = async (device, e) => {
     if (e) e.stopPropagation();
     const newStatus = device.status === 'offline' ? 'online' : 'offline';
@@ -308,6 +341,7 @@ export default function Home() {
       ip: totem.ip || '',
       ubicacion: totem.ubicacion || '',
       status: totem.status || 'online',
+      convenios: !!totem.convenios,
       videos: totem.videos
     });
     setShowEditModal(true);
@@ -509,7 +543,7 @@ export default function Home() {
                 border: totem.status === 'online' ? '1px solid #16a34a' : '1px solid #dc2626',
                 borderRadius: '8px',
                 padding: '8px 12px',
-                marginBottom: '12px',
+                marginBottom: '8px',
                 cursor: 'pointer',
                 userSelect: 'none',
                 transition: 'all 0.2s'
@@ -557,6 +591,66 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Switch interactivo: Habilitar/Deshabilitar Convenios */}
+            <div
+              onClick={(e) => handleToggleTotemConvenios(totem, e)}
+              title={totem.convenios ? 'Clic para Deshabilitar Convenios' : 'Clic para Habilitar Convenios'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: totem.convenios ? '#1e3a8a35' : '#33415535',
+                border: totem.convenios ? '1px solid #3b82f6' : '1px solid #475569',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                marginBottom: '12px',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.1rem' }}>
+                  {totem.convenios ? '🎟️' : '🎫'}
+                </span>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: totem.convenios ? '#93c5fd' : '#94a3b8' }}>
+                    Convenios: {totem.convenios ? 'HABILITADO' : 'DESHABILITADO'}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                    {totem.convenios ? 'Módulo de convenios activo' : 'Módulo de convenios inactivo'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Botón Switch Toggle Convenios */}
+              <div
+                style={{
+                  width: '46px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  background: totem.convenios ? '#3b82f6' : '#64748b',
+                  position: 'relative',
+                  padding: '2px',
+                  boxSizing: 'border-box',
+                  transition: 'background 0.2s',
+                  flexShrink: 0
+                }}
+              >
+                <div
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                    transform: totem.convenios ? 'translateX(22px)' : 'translateX(0px)',
+                    transition: 'transform 0.2s'
+                  }}
+                />
+              </div>
+            </div>
+
             <p style={{ margin: '0 0 5px', color: '#cbd5e1', fontSize: '0.9rem' }}>📍 Ubicación: <strong>{totem.ubicacion}</strong></p>
             <p style={{ margin: '0 0 15px', color: '#94a3b8', fontSize: '0.85rem' }}>
               🌐 IP Autodetectada (BBDD): <code>{totem.ip}</code>
@@ -592,7 +686,7 @@ export default function Home() {
                 ID Fijo Permanente: <code>{selectedTotem.identificador}</code> | IP Autodetectada: <code>{selectedTotem.ip}</code> | Ubicación: {selectedTotem.ubicacion}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               {/* Switch en Header del Tótem Seleccionado */}
               <button
                 type="button"
@@ -612,6 +706,28 @@ export default function Home() {
                 }}
               >
                 <span>{selectedTotem.status === 'online' ? '🟢 Botón Inicio Habilitado' : '🔴 Botón Inicio Deshabilitado'}</span>
+                <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px' }}>Cambiar</span>
+              </button>
+
+              {/* Switch Convenios en Header del Tótem Seleccionado */}
+              <button
+                type="button"
+                onClick={(e) => handleToggleTotemConvenios(selectedTotem, e)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: selectedTotem.convenios ? '#1e3a8a' : '#334155',
+                  color: selectedTotem.convenios ? '#93c5fd' : '#cbd5e1',
+                  border: selectedTotem.convenios ? '1px solid #3b82f6' : '1px solid #64748b',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <span>{selectedTotem.convenios ? '🎟️ Convenios Habilitado' : '🎫 Convenios Deshabilitado'}</span>
                 <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px' }}>Cambiar</span>
               </button>
 
@@ -950,6 +1066,49 @@ export default function Home() {
                     }}
                   >
                     🔴 Deshabilitado (Offline)
+                  </button>
+                </div>
+              </div>
+
+              {/* Control de Convenios */}
+              <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                  🎟️ Módulo de Convenios:
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTotemEditForm({ ...totemEditForm, convenios: true })}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: totemEditForm.convenios ? '#1e3a8a' : '#1e293b',
+                      color: totemEditForm.convenios ? '#93c5fd' : '#94a3b8',
+                      border: totemEditForm.convenios ? '1px solid #3b82f6' : '1px solid #334155',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    🎟️ Habilitado (True)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTotemEditForm({ ...totemEditForm, convenios: false })}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: !totemEditForm.convenios ? '#334155' : '#1e293b',
+                      color: !totemEditForm.convenios ? '#e2e8f0' : '#94a3b8',
+                      border: !totemEditForm.convenios ? '1px solid #64748b' : '1px solid #334155',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    🎫 Deshabilitado (False)
                   </button>
                 </div>
               </div>

@@ -44,6 +44,7 @@ export default async function handler(req, res) {
           COALESCE(d.ip, t.ip, 'Sin IP') as ip, 
           COALESCE(d.ubicacion, t.ubicacion, 'Sin ubicación') as ubicacion, 
           t.status, 
+          COALESCE(d.convenios, t.convenios, false) as convenios, 
           t.videos, 
           t.updated_at
         FROM ${schema}.totems_publicidad t
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
       try {
         const devResult = await pool.query(`
           SELECT DISTINCT ON (LOWER(identificador)) 
-            id, identificador, ip, ubicacion, status, ultima_conexion 
+            id, identificador, ip, ubicacion, status, convenios, ultima_conexion 
           FROM ${schema}.dispositivos 
           ORDER BY LOWER(identificador) ASC, id DESC
         `);
@@ -88,7 +89,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-    let { id, identificador, ip, ubicacion, status, videos } = req.body;
+    let { id, identificador, ip, ubicacion, status, convenios, videos } = req.body;
 
     if (!identificador) {
       return res.status(400).json({ success: false, error: 'El identificador único es requerido.' });
@@ -98,12 +99,19 @@ export default async function handler(req, res) {
 
     // 1. Sincronizar inmediatamente en la tabla bano_autoservicio.dispositivos
     try {
-      await pool.query(
-        `UPDATE ${schema}.dispositivos SET status = $1 WHERE LOWER(identificador) = LOWER($2)`,
-        [currentStatus, identificador]
-      );
+      if (convenios !== undefined) {
+        await pool.query(
+          `UPDATE ${schema}.dispositivos SET status = $1, convenios = $2 WHERE LOWER(identificador) = LOWER($3)`,
+          [currentStatus, Boolean(convenios), identificador]
+        );
+      } else {
+        await pool.query(
+          `UPDATE ${schema}.dispositivos SET status = $1 WHERE LOWER(identificador) = LOWER($2)`,
+          [currentStatus, identificador]
+        );
+      }
     } catch (devUpdateErr) {
-      console.warn('[DB] Error actualizando status en dispositivos:', devUpdateErr.message);
+      console.warn('[DB] Error actualizando status/convenios en dispositivos:', devUpdateErr.message);
     }
 
     // Buscar automaticamente la IP y Ubicacion mas reciente en la tabla 'dispositivos' si no viene especificada
@@ -134,33 +142,36 @@ export default async function handler(req, res) {
 
     try {
       let result;
+      const isConvenios = convenios !== undefined ? Boolean(convenios) : false;
+
       if (id) {
         if (videos !== undefined) {
           result = await pool.query(
             `UPDATE ${schema}.totems_publicidad 
-             SET identificador = $1, ip = $2, ubicacion = $3, status = $4, videos = $5, updated_at = NOW()
-             WHERE id = $6
+             SET identificador = $1, ip = $2, ubicacion = $3, status = $4, convenios = $5, videos = $6, updated_at = NOW()
+             WHERE id = $7
              RETURNING *`,
-            [identificador, ip, ubicacion || 'Sin ubicación', currentStatus, JSON.stringify(videos || []), id]
+            [identificador, ip, ubicacion || 'Sin ubicación', currentStatus, isConvenios, JSON.stringify(videos || []), id]
           );
         } else {
           result = await pool.query(
             `UPDATE ${schema}.totems_publicidad 
-             SET identificador = $1, ip = $2, ubicacion = $3, status = $4, updated_at = NOW()
-             WHERE id = $5
+             SET identificador = $1, ip = $2, ubicacion = $3, status = $4, convenios = COALESCE($5, convenios), updated_at = NOW()
+             WHERE id = $6
              RETURNING *`,
-            [identificador, ip, ubicacion || 'Sin ubicación', currentStatus, id]
+            [identificador, ip, ubicacion || 'Sin ubicación', currentStatus, convenios !== undefined ? Boolean(convenios) : null, id]
           );
         }
       } else {
         result = await pool.query(
-          `INSERT INTO ${schema}.totems_publicidad (identificador, ip, ubicacion, status, videos)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO ${schema}.totems_publicidad (identificador, ip, ubicacion, status, convenios, videos)
+           VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (identificador) 
            DO UPDATE SET ip = EXCLUDED.ip, ubicacion = EXCLUDED.ubicacion, status = EXCLUDED.status, 
+                         convenios = COALESCE(EXCLUDED.convenios, totems_publicidad.convenios),
                          videos = COALESCE(EXCLUDED.videos, totems_publicidad.videos), updated_at = NOW()
            RETURNING *`,
-          [identificador, ip, ubicacion || 'Sin ubicación', currentStatus, JSON.stringify(videos || [])]
+          [identificador, ip, ubicacion || 'Sin ubicación', currentStatus, isConvenios, JSON.stringify(videos || [])]
         );
       }
 
